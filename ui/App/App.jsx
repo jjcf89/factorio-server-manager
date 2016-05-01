@@ -1,4 +1,5 @@
 import React from 'react';
+import {browserHistory} from 'react-router';
 import Header from './components/Header.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import Footer from './components/Footer.jsx';
@@ -8,6 +9,7 @@ import HiddenSidebar from './components/HiddenSidebar.jsx';
 class App extends React.Component {
     constructor(props) {
         super(props);
+        this.checkLogin = this.checkLogin.bind(this);
         this.facServStatus = this.facServStatus.bind(this);
         this.getSaves = this.getSaves.bind(this);
         this.getStatus = this.getStatus.bind(this);
@@ -16,7 +18,30 @@ class App extends React.Component {
             serverStatus: {},
             saves: [],
             loggedIn: false,
+            username: "",
         }
+    }
+
+    componentDidMount() {
+        this.checkLogin();
+        setTimeout(() => {
+            if (!this.state.loggedIn) {
+                browserHistory.push("/login");
+            }
+        }, 1000);
+    }
+
+    checkLogin() {
+        $.ajax({
+            url: "/api/user/status",
+            dataType: "json",
+            success: (data) => {
+                if (data.success === true) {
+                    this.setState({loggedIn: true,
+                        username: data.data.Username})
+                }
+            }
+        })
     }
 
     facServStatus() {
@@ -56,32 +81,49 @@ class App extends React.Component {
     }
 
     render() {
+        // render main application, if not logged in show Not logged in message
+        // if logged in show application
+        var resp;
+        if (this.state.loggedIn) {
+            var resp = 
+                <div>
+                    <Header 
+                        username={this.state.username}
+                        loggedIn={this.state.loggedIn}
+                    />
+
+                    <Sidebar 
+                        serverStatus={this.facServStatus}
+                        serverRunning={this.state.serverRunning}
+                    />
+                    
+                    {React.cloneElement(
+                        this.props.children,
+                        {message: "",
+                        facServStatus: this.facServStatus,
+                        serverStatus: this.state.serverStatus,
+                        getStatus: this.getStatus,
+                        saves: this.state.saves,
+                        getSaves: this.getSaves,
+                        username: this.state.username}
+                    )}
+
+                    <Footer />
+
+                    <HiddenSidebar 
+                        serverStatus={this.state.serverStatus}
+                        username={this.state.username}
+                        loggedIn={this.state.loggedIn}
+                        checkLogin={this.checkLogin}
+                    />
+                </div>
+        } else {
+            var resp = <div><p>Not Logged in</p></div>;
+        }
+
         return(
-            <div className="wrapper" style={{height: "100%"}}>
-
-                <Header />
-
-                <Sidebar 
-                    serverStatus={this.facServStatus}
-                    serverRunning={this.state.serverRunning}
-                />
-                
-                {React.cloneElement(
-                    this.props.children,
-                    {message: "",
-                     facServStatus: this.facServStatus,
-                     serverStatus: this.state.serverStatus,
-                     getStatus: this.getStatus,
-                     saves: this.state.saves,
-                     getSaves: this.getSaves}
-                )}
-
-                <Footer />
-
-                <HiddenSidebar 
-                    serverStatus={this.state.serverStatus}
-                />
-
+            <div className="wrapper">
+            {resp}
             </div>
         )
     }

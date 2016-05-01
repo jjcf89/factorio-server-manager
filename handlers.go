@@ -18,10 +18,6 @@ type JSONResponse struct {
 	Data    interface{} `json:"data,string"`
 }
 
-func Index(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "hello world")
-}
-
 // Returns JSON response of all mods installed in factorio/mods
 func ListInstalledMods(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -454,11 +450,22 @@ func StartServer(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error in starting factorio server handler body: %s", err)
 			return
 		}
+
 		log.Printf("Starting Factorio server with settings: %v", string(body))
 
 		err = json.Unmarshal(body, &FactorioServ)
 		if err != nil {
 			log.Printf("Error unmarshaling server settings JSON: %s", err)
+			return
+		}
+
+		// Check if savefile was submitted with request to start server.
+		if FactorioServ.Savefile == "" {
+			log.Printf("Error starting Factorio server: %s", err)
+			resp.Data = fmt.Sprintf("Error starting Factorio server: %s", err)
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				log.Printf("Error encoding config file JSON reponse: ", err)
+			}
 			return
 		}
 
@@ -549,4 +556,101 @@ func CheckServer(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error encoding config file JSON reponse: ", err)
 		}
 	}
+}
+
+func LoginUser(w http.ResponseWriter, r *http.Request) {
+	resp := JSONResponse{
+		Success: false,
+	}
+
+	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+
+	switch r.Method {
+	case "GET":
+		log.Printf("GET not supported for login handler")
+		resp.Data = "Unsupported method"
+		resp.Success = false
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("Error listing mods: %s", err)
+		}
+	case "POST":
+		var user User
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Error in starting factorio server handler body: %s", err)
+			return
+		}
+
+		err = json.Unmarshal(body, &user)
+		if err != nil {
+			log.Printf("Error unmarshaling server settings JSON: %s", err)
+			return
+		}
+
+		log.Printf("Logging in user: %s", user.Username)
+
+		err = Auth.aaa.Login(w, r, user.Username, user.Password, "/")
+		if err != nil {
+			log.Printf("Error logging in user: %s, error: %s", user.Username, err)
+			resp.Data = fmt.Sprintf("Error logging in user: %s", user.Username)
+			resp.Success = false
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				log.Printf("Error listing mods: %s", err)
+			}
+			return
+		}
+
+		log.Printf("User: %s, logged in successfully", user.Username)
+		resp.Data = fmt.Sprintf("User: %s, logged in successfully", user.Username)
+		resp.Success = true
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("Error listing mods: %s", err)
+		}
+	}
+}
+
+func LogoutUser(w http.ResponseWriter, r *http.Request) {
+	resp := JSONResponse{
+		Success: false,
+	}
+
+	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+
+	if err := Auth.aaa.Logout(w, r); err != nil {
+		log.Printf("Error logging out current user")
+		return
+	}
+
+	resp.Success = true
+	resp.Data = "User logged out successfully."
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("Error logging out: %s", err)
+	}
+}
+
+func GetCurrentLogin(w http.ResponseWriter, r *http.Request) {
+	resp := JSONResponse{
+		Success: false,
+	}
+
+	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+
+	user, err := Auth.aaa.CurrentUser(w, r)
+	if err != nil {
+		log.Printf("Error getting current user status: %s", err)
+		resp.Data = fmt.Sprintf("Error getting user status: %s", user.Username)
+		resp.Success = false
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("Error listing mods: %s", err)
+		}
+		return
+	}
+
+	resp.Success = true
+	resp.Data = user
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("Error getting user status: %s", err)
+	}
+
 }
